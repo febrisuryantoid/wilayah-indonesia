@@ -4,8 +4,8 @@ import { Copy, Terminal, CheckCircle2, Globe, Database, Server } from 'lucide-re
 export const OpenApiDocs: React.FC = () => {
   const [copied, setCopied] = React.useState<string | null>(null);
 
-  // Gunakan window.location.origin agar dinamis mengikuti domain Vercel saat dideploy
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-app.vercel.app';
+  // Hardcode domain sesuai permintaan user
+  const baseUrl = 'https://apiwilayahindonesia.vercel.app';
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -62,21 +62,21 @@ fetch('${baseUrl}/api/villages/3273060.json')
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -mr-16 -mt-16 pointer-events-none"></div>
         <div className="relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-4">
-            <CheckCircle2 className="w-3 h-3" /> Self Hosted API
+            <CheckCircle2 className="w-3 h-3" /> Public API
           </div>
           <h2 className="text-3xl md:text-4xl font-extrabold mb-4 text-slate-800">
             Open API Dokumentasi
           </h2>
           <p className="text-slate-600 max-w-2xl leading-relaxed">
-            Platform ini dirancang sebagai <strong>Static API Server</strong> yang berjalan di atas Vercel. 
-            Anda dapat mengakses raw JSON data langsung dari domain aplikasi ini.
+            Platform ini menyediakan <strong>REST API Publik</strong> yang dapat diakses secara gratis. 
+            Data disajikan dalam format JSON dan di-proxy langsung dari repositori data terbuka Indonesia.
           </p>
           <div className="flex gap-4 mt-6">
              <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
-                <Server className="w-4 h-4 text-indigo-500" /> Vercel Hosted
+                <Server className="w-4 h-4 text-indigo-500" /> HTTPS Supported
              </div>
              <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
-                <Database className="w-4 h-4 text-fuchsia-500" /> Static JSON
+                <Database className="w-4 h-4 text-fuchsia-500" /> JSON Response
              </div>
           </div>
         </div>
@@ -115,7 +115,7 @@ fetch('${baseUrl}/api/villages/3273060.json')
       </div>
       
       <div className="mt-8 text-center text-slate-400 text-sm">
-         Powered by Vercel Static Generation
+         API Endpoint: <span className="font-mono text-indigo-500">{baseUrl}</span>
       </div>
     </div>
   );

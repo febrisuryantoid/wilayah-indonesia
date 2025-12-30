@@ -2,62 +2,40 @@ import { Province, Regency, District, Village } from '../types';
 import { dbService } from './db';
 import { PROVINCES_DATA } from '../data/initialData';
 
-// DAFTAR MIRROR (Diurutkan berdasarkan stabilitas)
-const MIRRORS = [
-  'https://emsifa.github.io/api-wilayah-indonesia/api',
-  'https://wahyupulse.github.io/api-wilayah-indonesia/api',
-  'https://kanglerian.github.io/api-wilayah-indonesia/api',
-];
+// Gunakan endpoint lokal. Karena kita sudah setting Vercel Proxy,
+// '/api' akan otomatis mengambil data dari sumber terupdate.
+const API_BASE_URL = '/api';
 
-// Helper: Fetch dengan Validasi Ketat
-async function fetchWithFailover(endpoint: string): Promise<Response | null> {
-  let errors: string[] = [];
-
-  for (const baseUrl of MIRRORS) {
-    try {
-      // Tambahkan timestamp untuk bypass cache browser/proxy yang nyangkut di error 404
-      const url = `${baseUrl}/${endpoint}?time=${new Date().getTime()}`;
+// Helper: Fetch Sederhana namun Kuat
+async function fetchFromApi(endpoint: string): Promise<Response | null> {
+  try {
+      // Bersihkan slash di awal jika ada
+      const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+      const url = `${API_BASE_URL}/${cleanEndpoint}`;
       
-      // Timeout 15 detik untuk koneksi lambat
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); 
-
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
+      const response = await fetch(url);
       
-      // 1. Jika Sukses (200 OK)
       if (response.ok) {
-        // Validasi content-type json
+        // Validasi konten apakah benar JSON
         const contentType = response.headers.get("content-type");
-        if (contentType && contentType.indexOf("application/json") !== -1) {
+        if (contentType && contentType.includes("application/json")) {
             return response;
-        } else {
-            // Fallback check body text
-            const clone = response.clone();
-            const text = await clone.text();
-            if (text.trim().startsWith('[') || text.trim().startsWith('{')) {
-                return response;
-            }
-            throw new Error(`Invalid Content-Type from ${baseUrl}`);
+        } 
+        
+        // Double check body text jika header tidak sesuai
+        const clone = response.clone();
+        const text = await clone.text();
+        if (text.trim().startsWith('[') || text.trim().startsWith('{')) {
+            return response;
         }
       }
       
-      // 2. Jika 404 Not Found (Data memang tidak ada)
-      if (response.status === 404) {
-        console.warn(`[404] File not found at ${baseUrl}: ${endpoint}`);
-        continue;
-      }
-
-      // 3. Error Server Lain
-      throw new Error(`Server Error ${response.status} from ${baseUrl}`);
-
-    } catch (error: any) {
-      errors.push(`${baseUrl}: ${error.message}`);
-    }
+      console.warn(`Gagal mengambil data dari ${url}: ${response.status}`);
+      return null;
+  } catch (error) {
+      console.error(`Network Error:`, error);
+      return null;
   }
-
-  console.warn(`[Failover] Gagal mengambil ${endpoint}. Details:`, errors);
-  return null;
 }
 
 const sortByName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
@@ -75,7 +53,7 @@ async function fetchAndCache<T extends { name: string }>(
   }
 
   try {
-    // 1. Cek DB Lokal
+    // 1. Cek DB Lokal (IndexedDB) dulu biar ngebut
     let localData: T[] = [];
     try {
         if (parentId && parentIndexName) {
@@ -89,20 +67,19 @@ async function fetchAndCache<T extends { name: string }>(
 
     if (localData.length > 0) return localData.sort(sortByName);
 
-    // 2. Fetch Remote
-    const response = await fetchWithFailover(apiEndpoint);
+    // 2. Fetch dari Vercel Proxy jika tidak ada di DB
+    const response = await fetchFromApi(apiEndpoint);
     
     if (!response) return [];
 
     const data = await response.json();
     
-    // 3. Validasi & Simpan ke DB
+    // 3. Simpan ke DB Lokal untuk akses offline berikutnya
     if (Array.isArray(data) && data.length > 0) {
-        // CRITICAL FIX: Harus di-await agar data tersedia untuk proses selanjutnya (terutama saat Bulk Download)
         try {
             await dbService.addBulk(tableName, data);
         } catch (dbWriteErr) {
-            console.error("Gagal menulis ke DB lokal, menggunakan data memori.", dbWriteErr);
+            console.error("Gagal menulis ke DB lokal.", dbWriteErr);
         }
         return data.sort(sortByName);
     }
@@ -115,13 +92,16 @@ async function fetchAndCache<T extends { name: string }>(
   }
 }
 
-// --- Standard API ---
+// --- Standard API Exports ---
+
 export const fetchProvinces = async (): Promise<Province[]> => {
+  // Cek DB dulu
   const localData = await dbService.getAll<Province>('provinces');
   if (localData.length > 0) return localData.sort(sortByName);
 
+  // Fetch dari Proxy
   try {
-      const response = await fetchWithFailover('provinces.json');
+      const response = await fetchFromApi('provinces.json');
       if (response) {
           const data = await response.json();
           if (Array.isArray(data)) {
@@ -131,7 +111,7 @@ export const fetchProvinces = async (): Promise<Province[]> => {
       }
   } catch (e) { console.warn(e); }
 
-  // Fallback ke static data
+  // Fallback terakhir: Data statis
   await dbService.addBulk('provinces', PROVINCES_DATA);
   return PROVINCES_DATA.sort(sortByName);
 };
@@ -149,7 +129,7 @@ export const getDatabaseStats = async () => {
   };
 };
 
-// --- BULK DOWNLOADER LOGIC (Concurrent Queue) ---
+// --- BULK DOWNLOADER LOGIC ---
 
 type ProgressCallback = (message: string, percent: number) => void;
 
@@ -184,14 +164,11 @@ export const downloadFullDatabase = async (onProgress: ProgressCallback) => {
         // 1. Provinces
         onProgress("Mengunduh Data Provinsi...", 2);
         const provinces = await fetchProvinces();
-        
-        // Filter: Pastikan kita hanya mencoba download detail provinsi yang datanya valid
         const validProvinces = provinces.filter(p => p.id); 
         
         onProgress(`Ditemukan ${validProvinces.length} Provinsi.`, 5);
 
         // 2. Regencies
-        // Kita gunakan pool limit kecil agar tidak membebani network di awal
         const totalProvinces = validProvinces.length;
         await asyncPool(6, validProvinces, async (prov) => {
             await fetchRegencies(prov.id);
@@ -200,13 +177,10 @@ export const downloadFullDatabase = async (onProgress: ProgressCallback) => {
             onProgress(`Mengunduh Kab/Kota (${count}/${totalProvinces})...`, pct);
         });
 
-        // PENTING: Ambil data dari DB yang BARU SAJA disimpan
         const allRegencies = await dbService.getAll<Regency>('regencies');
         const totalRegencies = allRegencies.length;
 
-        if (totalRegencies === 0) {
-            throw new Error("Gagal mengunduh data Kabupaten/Kota. Periksa koneksi internet Anda.");
-        }
+        if (totalRegencies === 0) throw new Error("Gagal mengunduh data Kabupaten/Kota.");
 
         // 3. Districts
         await asyncPool(12, allRegencies, async (reg) => {
@@ -219,11 +193,9 @@ export const downloadFullDatabase = async (onProgress: ProgressCallback) => {
         const allDistricts = await dbService.getAll<District>('districts');
         const totalDistricts = allDistricts.length;
 
-        if (totalDistricts === 0) {
-             throw new Error("Gagal mengunduh data Kecamatan.");
-        }
+        if (totalDistricts === 0) throw new Error("Gagal mengunduh data Kecamatan.");
 
-        // 4. Villages (Heavy Load)
+        // 4. Villages
         await asyncPool(20, allDistricts, async (dist) => {
             await fetchVillages(dist.id);
         }, (count) => {
@@ -233,11 +205,8 @@ export const downloadFullDatabase = async (onProgress: ProgressCallback) => {
 
         onProgress("Finalisasi Database...", 99);
         
-        // Verifikasi akhir
         const stats = await getDatabaseStats();
-        if (stats.villages === 0) {
-            throw new Error("Proses selesai namun data Desa kosong.");
-        }
+        if (stats.villages === 0) throw new Error("Proses selesai namun data Desa kosong.");
 
         onProgress("Selesai! Database tersinkronisasi.", 100);
         return true;

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { fetchProvinces, fetchRegencies, fetchDistricts, fetchVillages } from './services/locationService';
-import { Province, Regency, District, Village } from './types';
+import { Province, Regency, District, Village, APP_VERSION, LAST_UPDATED } from './types';
 import { Selector } from './components/Selector';
 import { StatsChart } from './components/StatsChart';
 import { DatabaseStatus } from './components/DatabaseStatus';
 import { OpenApiDocs } from './components/OpenApiDocs';
-import { Map, MapPin, Navigation, Hash, ExternalLink, Globe, Sparkles, ChevronRight, Home, Code2, LayoutGrid } from 'lucide-react';
+import { Map, MapPin, Navigation, Hash, ExternalLink, Globe, Sparkles, ChevronRight, Home, Code2, LayoutGrid, GitBranch } from 'lucide-react';
 
 type ViewMode = 'explorer' | 'openapi';
 
@@ -388,11 +388,20 @@ const App: React.FC = () => {
 
       <DatabaseStatus />
 
-      <footer className="w-full max-w-[1600px] mx-auto px-4 py-8 text-center relative z-10">
+      <footer className="w-full max-w-[1600px] mx-auto px-4 py-8 text-center relative z-10 space-y-2">
          <div className="glass-panel inline-block px-6 py-3 rounded-full border border-white/50 shadow-sm">
             <p className="text-xs font-medium text-slate-500">
               © {new Date().getFullYear()} Wilayah Indonesia. <span className="text-slate-300 mx-2">|</span> Data untuk Semua.
             </p>
+         </div>
+         
+         {/* Version Indicator */}
+         <div className="flex justify-center items-center gap-3 text-[10px] text-slate-400">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full border border-slate-200/50">
+              <GitBranch className="w-3 h-3" />
+              <span className="font-mono">v{APP_VERSION}</span>
+            </div>
+            <span>Updated: {LAST_UPDATED}</span>
          </div>
       </footer>
     </div>

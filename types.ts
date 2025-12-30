@@ -1,3 +1,4 @@
+
 export interface Province {
   id: string;
   name: string;
@@ -27,3 +28,8 @@ export interface BreadcrumbItem {
   label: string;
   level: LocationLevel;
 }
+
+// Konfigurasi Versi Aplikasi
+// Ubah nilai ini setiap kali Anda melakukan update besar
+export const APP_VERSION = "1.1.0";
+export const LAST_UPDATED = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });

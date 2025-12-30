@@ -1,5 +1,6 @@
 {
   "name": "Wilayah Indonesia",
   "description": "Aplikasi eksplorasi data administratif wilayah Indonesia lengkap dari Provinsi hingga Desa/Kelurahan.",
+  "version": "1.1.0",
   "requestFramePermissions": []
 }
